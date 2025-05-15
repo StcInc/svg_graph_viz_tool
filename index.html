@@ -42,9 +42,11 @@
                 background: none;
             }
             form {
-                position: fixed;
+                position: relative;
                 margin: 0;
                 padding: 1em;
+                top: 3em;
+                /* overflow: hidden; */
             }
 
             label {
@@ -54,7 +56,7 @@
     </head>
     <body>
         <svg id="my-svg"></svg>
-        <form>
+        <form id="search-bar">
             <label for="search-text">Search:</label>
             <input type="text" id="search-text" name="search-text" />
         </form>
@@ -112,7 +114,7 @@
                 //const svg = document.querySelector("svg")
                 const svg = document.getElementById("my-svg");
                 const searchText = document.getElementById("search-text");
-
+                const searchBar = document.getElementById("search-bar");
                 // create nodes
 
                 let randInt = (min, max) => {
@@ -551,24 +553,43 @@
                 window.addEventListener(
                     "wheel",
                     (e) => {
-                        if (e.ctrlKey) {
-                            // this prevents zoom in/out with touchpad pinch to zoom as it breaks everything
-                            e.preventDefault();
-                            return;
-                        }
-
+                        e.preventDefault();
                         const match = svg.style.transform.match(
-                            /translate\((-?\d+)px,\s*(-?\d+)px\)/,
+                            // /translate\((-?\d+)px,\s*(-?\d+)px\)/,
+                            /scale\((-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)\)\s*translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
                         );
-                        let x = -e.deltaX;
-                        let y = -e.deltaY;
+
+                        // console.log("Match", match);
+
+                        var x = 0;
+                        var y = 0;
+                        var sx = 1.0;
 
                         if (match) {
-                            x += Number(match[1]);
-                            y += Number(match[2]);
+                            sx = Number(match[1]);
+                            x = Number(match[5]);
+                            y = Number(match[7]);
                         }
 
-                        svg.style.transform = `translate(${x}px, ${y}px)`;
+                        // console.log("Parsed transform: ", x, y, sx);
+                        // console.log(e.wheelDelta);
+                        // console.log(e.deltaX, e.deltaY);
+
+                        if (e.ctrlKey) {
+                            // zoom
+                            if (e.wheelDelta > 0) {
+                                sx *= 1.05;
+                            } else {
+                                sx *= 0.95;
+                            }
+                            // console.log("Scaling", sx);
+                        } else {
+                            // translate
+                            x -= e.deltaX;
+                            y -= e.deltaY;
+                            // console.log("translating", x, y);
+                        }
+                        svg.style.transform = `scale(${sx}, ${sx}) translate(${x}px, ${y}px)`;
                     },
                     { passive: false },
                 );
