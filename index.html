@@ -46,7 +46,7 @@
                 position: relative;
                 margin: 0;
                 padding: 1em;
-                top: 3em;
+                top: 1em;
                 width: 20%;
                 /* overflow: hidden; */
             }
@@ -101,6 +101,9 @@
             // };
 
             // TOOD: make node-edge browser to see displayed nodes as a list
+
+            // TODO: scale movements by current scaling factor
+            // TODO: display scrolls bars to show where camera is or where is the active area (ocupied by nodes)
 
             var graph_data = {
                 nodes: [],
@@ -465,7 +468,7 @@
 
                     selectedElement = target.children[0];
                     selectedElement.classList.add("selected");
-                    console.log(selectedElement.parentElement.n);
+                    // console.log(selectedElement.parentElement.n);
 
                     // reenable connected edges and nodes
                     for (edge of selectedElement.parentElement.n.out_edges) {
@@ -669,6 +672,20 @@
                                     y: n.y,
                                 });
                             }
+                            for (n of sourceData.nodes) {
+                                if (
+                                    close(searchText.value, n.id) ||
+                                    close(searchText.value, n.type)
+                                ) {
+                                    graph_data.nodes.push({
+                                        id: n.id,
+                                        type: n.type,
+                                        x: n.x,
+                                        y: n.y,
+                                    });
+                                }
+                            }
+
                             createAll();
 
                             // alert(ele.value);
