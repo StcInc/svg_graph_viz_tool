@@ -432,6 +432,7 @@
                 // ============================================================
 
                 let selectedElement = null;
+                var currentScale = { value: 1.0 };
 
                 let mousedown = (e) => {
                     var target = e.target;
@@ -492,18 +493,18 @@
                     const startX = e.clientX;
                     const startY = e.clientY;
                     const match = selectedElement.style.transform.match(
-                        /translate\((-?\d+)px,\s*(-?\d+)px\)/,
+                        /translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
                     );
 
                     // and we are going to handle mousemove event
                     let mousemoveHandler = (e) => {
                         const dx = e.clientX - startX;
                         const dy = e.clientY - startY;
-                        let x = dx;
-                        let y = dy;
+                        let x = dx / currentScale.value;
+                        let y = dy / currentScale.value;
                         if (match) {
                             x += Number(match[1]);
-                            y += Number(match[2]);
+                            y += Number(match[3]);
                         }
                         for (child of selectedElement.parentElement.children) {
                             child.style.transform = `translate(${x}px, ${y}px)`;
@@ -589,11 +590,12 @@
                             } else {
                                 sx *= 0.95;
                             }
+                            currentScale.value = sx;
                             // console.log("Scaling", sx);
                         } else {
                             // translate
-                            x -= e.deltaX;
-                            y -= e.deltaY;
+                            x -= e.deltaX / currentScale.value;
+                            y -= e.deltaY / currentScale.value;
                             // console.log("translating", x, y);
                         }
                         svg.style.transform = `scale(${sx}, ${sx}) translate(${x}px, ${y}px)`;
