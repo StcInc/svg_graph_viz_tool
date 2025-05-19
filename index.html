@@ -59,7 +59,16 @@
         </style>
     </head>
     <body>
-        <svg id="my-svg"></svg>
+        <svg id="my-svg">
+            <rect
+                id="active_area"
+                width="200"
+                height="100"
+                x="0"
+                y="0"
+                style="fill: transparent; stroke-width: 3; stroke: red"
+            />
+        </svg>
         <form id="search-bar">
             <label for="search-text">Search:</label>
             <input type="text" id="search-text" name="search-text" />
@@ -120,6 +129,7 @@
             document.addEventListener("DOMContentLoaded", function () {
                 //const svg = document.querySelector("svg")
                 const svg = document.getElementById("my-svg");
+                const active_area = document.getElementById("active_area");
                 const searchText = document.getElementById("search-text");
                 const searchBar = document.getElementById("search-bar");
                 // create nodes
@@ -401,15 +411,30 @@
                         }
                     }
 
+                    // var max_node_len = 0;
                     // draw nodes last on top of everything else
                     for (n of graph_data.nodes) {
                         // TODO: n.x, n.y - are centers of node rects, not top left corner
                         n.g = create_node(n, n.x, n.y);
+                        // let w = n.g.getBoundingClientRect().width;
+                        // if (max_node_len < w) {
+                        //     max_node_len = w;
+                        // }
                         n.g.n = n;
                     }
+
+                    // console.log("Max node len:", max_node_len);
                 };
 
                 // init
+
+                let activeArea = {
+                    min_x: Infinity,
+                    max_x: -Infinity,
+                    min_y: Infinity,
+                    max_y: -Infinity,
+                };
+
                 for (n of sourceData.nodes) {
                     graph_data.nodes.push({
                         id: n.id,
@@ -417,7 +442,42 @@
                         x: n.x,
                         y: n.y,
                     });
+                    activeArea.min_x = Math.min(n.x, activeArea.min_x);
+                    activeArea.max_x = Math.max(n.x, activeArea.max_x);
+                    activeArea.min_y = Math.min(n.y, activeArea.min_y);
+                    activeArea.max_y = Math.max(n.y, activeArea.max_y);
                 }
+
+                let MARGIN = 500;
+                activeArea.min_x -= MARGIN;
+                activeArea.max_x += MARGIN;
+                activeArea.min_y -= MARGIN;
+                activeArea.max_y += MARGIN;
+                active_area.setAttribute("x", activeArea.min_x);
+                active_area.setAttribute("y", activeArea.min_y);
+                active_area.setAttribute(
+                    "width",
+                    activeArea.max_x - activeArea.min_x,
+                );
+                active_area.setAttribute(
+                    "height",
+                    activeArea.max_y - activeArea.min_y,
+                );
+                console.log("Active area", activeArea);
+
+                let center_x =
+                    (activeArea.min_x + activeArea.max_x) / 2 - 2 * MARGIN;
+                let center_y =
+                    (activeArea.min_y + activeArea.max_y) / 2 - 2 * MARGIN;
+
+                let initial_scale =
+                    svg.clientWidth / (activeArea.max_x - activeArea.min_x);
+
+                console.log(
+                    `Initial scale(${initial_scale}, ${initial_scale}) translate(${-center_x}px, ${-center_y}px)`,
+                );
+                svg.style.transform = `scale(${initial_scale}, ${initial_scale}) translate(${-center_x}px, ${-center_y}px)`;
+
                 for (e of sourceData.edges) {
                     graph_data.edges.push({
                         source_node_id: e.source_node_id,
@@ -432,7 +492,7 @@
                 // ============================================================
 
                 let selectedElement = null;
-                var currentScale = { value: 1.0 };
+                var currentScale = { value: initial_scale };
 
                 let mousedown = (e) => {
                     var target = e.target;
