@@ -222,6 +222,7 @@ function main() {
   // TODO: refactor everything related to state into state object
   // TOOD: make node-edge browser to see displayed nodes as a list
   // TODO: display scrolls bars to show where camera is or where is the active area (ocupied by nodes)
+  // TODO: show minimap for easier navigation
 
   // area occupied by graph
   let activeArea = {
@@ -232,7 +233,7 @@ function main() {
   };
   let MARGIN = 50;
 
-  function updateActiveArea() {
+  function updateOccupiedArea() {
     activeArea.min_x = Infinity;
     activeArea.max_x = -Infinity;
     activeArea.min_y = Infinity;
@@ -286,8 +287,8 @@ function main() {
   }
   createSVGs(svg, graph_data);
 
-  updateActiveArea();
-  console.log("Active area", activeArea);
+  updateOccupiedArea();
+  console.log("Occupied area:", activeArea);
 
   // move to active area's center
   let center_x =
@@ -302,6 +303,47 @@ function main() {
     `Initial scale(${initial_scale}, ${initial_scale}) translate(${-center_x}px, ${-center_y}px)`,
   );
   svg.style.transform = `scale(${initial_scale}, ${initial_scale}) translate(${-center_x}px, ${-center_y}px)`;
+
+  // ============================================================
+
+  function pan(dx, dy) {
+    const match = svg.style.transform.match(
+      /scale\((-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)\)\s*translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
+    );
+    var x = 0;
+    var y = 0;
+    var sx = 1.0;
+
+    if (match) {
+      sx = Number(match[1]);
+      x = Number(match[5]);
+      y = Number(match[7]);
+    }
+
+    x += dx;
+    y += dy;
+
+    svg.style.transform = `scale(${sx}, ${sx}) translate(${x}px, ${y}px)`;
+  }
+
+  function zoom(scale) {
+    const match = svg.style.transform.match(
+      /scale\((-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)\)\s*translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
+    );
+    var x = 0;
+    var y = 0;
+    var sx = 1.0;
+
+    if (match) {
+      sx = Number(match[1]);
+      x = Number(match[5]);
+      y = Number(match[7]);
+    }
+
+    sx *= scale;
+    currentScale.value = sx;
+    svg.style.transform = `scale(${sx}, ${sx}) translate(${x}px, ${y}px)`;
+  }
 
   // ============================================================
 
@@ -386,7 +428,7 @@ function main() {
       // console.log("Upd edges: ", selectedElement, x, y);
       update_edges(selectedElement, x, y);
 
-      updateActiveArea();
+      updateOccupiedArea();
     };
 
     const mouseupHandler = () => {
@@ -424,43 +466,17 @@ function main() {
     "wheel",
     (e) => {
       e.preventDefault();
-      const match = svg.style.transform.match(
-        // /translate\((-?\d+)px,\s*(-?\d+)px\)/,
-        /scale\((-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)\)\s*translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
-      );
-
-      // console.log("Match", match);
-
-      var x = 0;
-      var y = 0;
-      var sx = 1.0;
-
-      if (match) {
-        sx = Number(match[1]);
-        x = Number(match[5]);
-        y = Number(match[7]);
-      }
-
-      // console.log("Parsed transform: ", x, y, sx);
-      // console.log(e.wheelDelta);
-      // console.log(e.deltaX, e.deltaY);
 
       if (e.ctrlKey) {
         // zoom
         if (e.wheelDelta > 0) {
-          sx *= 1.05;
+          zoom(1.05);
         } else {
-          sx *= 0.95;
+          zoom(0.95);
         }
-        currentScale.value = sx;
-        // console.log("Scaling", sx);
       } else {
-        // translate
-        x -= e.deltaX / currentScale.value;
-        y -= e.deltaY / currentScale.value;
-        // console.log("translating", x, y);
+        pan(-e.deltaX / currentScale.value, -e.deltaY / currentScale.value);
       }
-      svg.style.transform = `scale(${sx}, ${sx}) translate(${x}px, ${y}px)`;
     },
     { passive: false },
   );
@@ -518,7 +534,7 @@ function main() {
     }
 
     createSVGs(svg, graph_data);
-    updateActiveArea();
+    updateOccupiedArea();
   };
 
   clearBtn.onclick = function (e) {
@@ -536,7 +552,21 @@ function main() {
     function (event) {
       event.preventDefault();
 
-      if (event.key == "Enter") {
+      // TODO: do not block command + r
+
+      if (event.key == "ArrowLeft") {
+        pan(10 / currentScale.value, 0);
+        return;
+      } else if (event.key == "ArrowRight") {
+        pan(-10 / currentScale.value, 0);
+        return;
+      } else if (event.key == "ArrowUp") {
+        pan(0, 10 / currentScale.value);
+        return;
+      } else if (event.key == "ArrowDown") {
+        pan(0, -10 / currentScale.value);
+        return;
+      } else if (event.key == "Enter") {
         // pass
       } else if (event.key == "Backspace") {
         searchText.value = searchText.value.substring(

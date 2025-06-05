@@ -1,3 +1,7 @@
 test.html
 .ipynb_checkpoints/
 snippets.js
+export_graph_data*
+*backup*
+*.ipynb
+*log.txt
