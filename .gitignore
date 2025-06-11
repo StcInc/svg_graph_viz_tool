@@ -5,3 +5,5 @@ export_graph_data*
 *backup*
 *.ipynb
 *log.txt
+.DS_Store
+*.dot

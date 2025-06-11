@@ -1,20 +1,83 @@
+var visualSettings = {
+  nodeColor: "blue",
+  nodeTextColor: "white",
+  nodeOutlineColor: "blue",
+  nodeOutlineWidth: 2,
+  nodeCornerRadius: 15,
+  edgeColor: "black",
+  edgeWidth: 2,
+  showArrows: true,
+  arrowSize: 21,
+  arrowOutlineWidth: 1,
+  arrowColor: "black",
+  arrowOutlineColor: "black",
+
+  edgeTextColor: "black",
+  edgeTextBackground: "white",
+  edgeLabelOutlineColor: "white",
+  showEdgeLabels: true,
+
+  backgroundColor: "white",
+  fontSize: "1em",
+  fontFamily: "Arial, Helvetica, sans-serif",
+};
+
 function randInt(min, max) {
   return Math.floor(min + Math.random() * (max - min));
 }
+function getArrowPoints(x1, y1, x2, y2) {
+  // rotate x1 around x2 by +-angle radians
+  let angle = 0.15;
+  let x3 = x2 + (x1 - x2) * Math.cos(angle) - (y1 - y2) * Math.sin(angle);
+  let y3 = y2 + (x1 - x2) * Math.sin(angle) + (y1 - y2) * Math.cos(angle);
+  let x4 = x2 + (x1 - x2) * Math.cos(-angle) - (y1 - y2) * Math.sin(-angle);
+  let y4 = y2 + (x1 - x2) * Math.sin(-angle) + (y1 - y2) * Math.cos(-angle);
 
+  // scale arrow
+  var dx = x2 - x3;
+  var dy = y2 - y3;
+  let dlen = Math.sqrt(dx * dx + dy * dy);
+
+  let scale = (1.0 - visualSettings.arrowSize / dlen) * dlen;
+
+  dx /= dlen;
+  dy /= dlen;
+  x3 = x3 + scale * dx;
+  y3 = y3 + scale * dy;
+
+  dx = x2 - x4;
+  dy = y2 - y4;
+  dx /= dlen;
+  dy /= dlen;
+  x4 = x4 + scale * dx;
+  y4 = y4 + scale * dy;
+
+  return `${x2}, ${y2} ${x3}, ${y3} ${x4}, ${y4}`;
+}
 function create_edge(svg, x1, y1, x2, y2) {
   var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-
-  g.appendChild(line);
   svg.appendChild(g);
+  var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  g.appendChild(line);
+
+  if (visualSettings.showArrows) {
+    var arrow = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "polygon",
+    );
+    g.appendChild(arrow);
+    arrow.setAttribute("points", getArrowPoints(x1, y1, x2, y2));
+    arrow.style.fill = visualSettings.arrowColor;
+    arrow.setAttribute("stroke", visualSettings.arrowOutlineColor);
+    arrow.setAttribute("stroke-width", visualSettings.arrowOutlineWidth);
+  }
 
   line.setAttribute("x1", x1);
   line.setAttribute("y1", y1);
   line.setAttribute("x2", x2);
   line.setAttribute("y2", y2);
-  line.setAttribute("stroke", "purple");
-  line.setAttribute("stroke-width", 2);
+  line.setAttribute("stroke", visualSettings.edgeColor);
+  line.setAttribute("stroke-width", visualSettings.edgeWidth);
 
   return g;
 }
@@ -35,7 +98,9 @@ function create_edge_label(svg, name, x1, y1, x2, y2) {
   text.setAttribute("y", y);
   text.setAttribute("dominant-baseline", "middle");
   text.setAttribute("text-anchor", "middle");
-  text.setAttribute("fill", "red");
+  text.setAttribute("fill", visualSettings.edgeTextColor);
+  text.setAttribute("font-family", visualSettings.fontFamily);
+  text.setAttribute("font-size", visualSettings.fontSize);
   text.textContent = name;
 
   let width = text.getBBox().width + 20;
@@ -45,8 +110,8 @@ function create_edge_label(svg, name, x1, y1, x2, y2) {
   rect.setAttribute("y", y - height / 2);
   rect.setAttribute("height", height);
   rect.setAttribute("width", width);
-  rect.setAttribute("fill", "white");
-  rect.setAttribute("stroke", "white");
+  rect.setAttribute("fill", visualSettings.edgeTextBackground);
+  rect.setAttribute("stroke", visualSettings.edgeLabelOutlineColor);
 
   return g;
 }
@@ -63,7 +128,9 @@ function create_node(svg, name, x, y) {
   text.setAttribute("y", y);
   text.setAttribute("dominant-baseline", "middle");
   text.setAttribute("text-anchor", "middle");
-  text.setAttribute("fill", "black");
+  text.setAttribute("fill", visualSettings.nodeTextColor);
+  text.setAttribute("font-family", visualSettings.fontFamily);
+  text.setAttribute("font-size", visualSettings.fontSize);
   text.textContent = name;
 
   let bb = text.getBBox();
@@ -76,10 +143,10 @@ function create_node(svg, name, x, y) {
   rect.setAttribute("width", width);
   rect.setAttribute("height", height);
 
-  rect.setAttribute("fill", "white");
-  rect.setAttribute("stroke", "black");
-  rect.setAttribute("stroke-width", 2);
-  rect.setAttribute("rx", 15);
+  rect.setAttribute("fill", visualSettings.nodeColor);
+  rect.setAttribute("stroke", visualSettings.nodeOutlineColor);
+  rect.setAttribute("stroke-width", visualSettings.nodeOutlineWidth);
+  rect.setAttribute("rx", visualSettings.nodeCornerRadius);
   return g;
 }
 
@@ -130,7 +197,7 @@ function createSVGs(svg, graph_data) {
   }
   // draw edge labels on top of edge lines
   for (e of graph_data.edges) {
-    if (e.src_node && e.target_node) {
+    if (visualSettings.showEdgeLabels && e.src_node && e.target_node) {
       e.lg = create_edge_label(
         svg,
         e.type,
@@ -147,15 +214,70 @@ function createSVGs(svg, graph_data) {
     n.g = create_node(svg, n.id, n.x, n.y);
     n.g.n = n;
   }
+  for (n of graph_data.nodes) {
+    update_edges(n.g.children[0], 0, 0);
+  }
+}
+
+function edgeNodeBorderIntersect(x1, y1, x2, y2, width, height) {
+  var w = width / 2;
+  var h = height / 2;
+
+  var dx = x1 - x2;
+  var dy = y1 - y2;
+
+  if (Math.sqrt(dx * dx + dy * dy) < Math.min(w, h)) {
+    // not intersecting borders
+    return {
+      x: x2,
+      y: y2,
+    };
+  }
+
+  var tan_phi = h / w;
+  var tan_theta = Math.abs(dy / dx);
+
+  var qx = Math.sign(dx);
+  var qy = Math.sign(dy);
+
+  if (tan_theta > tan_phi) {
+    return {
+      x: x2 + (h / tan_theta) * qx,
+      y: y2 + h * qy,
+    };
+  }
+  return {
+    x: x2 + w * qx,
+    y: y2 + w * tan_theta * qy,
+  };
 }
 
 function update_edges(node, x, y) {
   let bb = node.getBBox();
 
   for (e of node.parentElement.n.in_edges) {
-    // update line
     e.g.children[0].setAttribute("x2", bb.x + x + bb.width / 2);
     e.g.children[0].setAttribute("y2", bb.y + y + bb.height / 2);
+
+    if (visualSettings.showArrows) {
+      let borderPoint = edgeNodeBorderIntersect(
+        parseFloat(e.g.children[0].getAttribute("x1")),
+        parseFloat(e.g.children[0].getAttribute("y1")),
+        bb.x + x + bb.width / 2,
+        bb.y + y + bb.height / 2,
+        bb.width,
+        bb.height,
+      );
+      e.g.children[1].setAttribute(
+        "points",
+        getArrowPoints(
+          parseFloat(e.g.children[0].getAttribute("x1")),
+          parseFloat(e.g.children[0].getAttribute("y1")),
+          borderPoint.x,
+          borderPoint.y,
+        ),
+      );
+    }
 
     let m = getMidPoint(e.g.children[0]);
 
@@ -178,6 +300,28 @@ function update_edges(node, x, y) {
     e.g.children[0].setAttribute("x1", bb.x + x + bb.width / 2);
     e.g.children[0].setAttribute("y1", bb.y + y + bb.height / 2);
 
+    if (visualSettings.showArrows) {
+      let tgtbb = e.target_node.g.getBBox();
+      let borderPoint = edgeNodeBorderIntersect(
+        bb.x + x + bb.width / 2,
+        bb.y + y + bb.height / 2,
+        parseFloat(e.g.children[0].getAttribute("x2")),
+        parseFloat(e.g.children[0].getAttribute("y2")),
+        tgtbb.width,
+        tgtbb.height,
+      );
+
+      e.g.children[1].setAttribute(
+        "points",
+        getArrowPoints(
+          bb.x + x + bb.width / 2,
+          bb.y + y + bb.height / 2,
+          borderPoint.x,
+          borderPoint.y,
+        ),
+      );
+    }
+
     let m = getMidPoint(e.g.children[0]);
 
     e.lg.children[0].setAttribute(
@@ -191,6 +335,16 @@ function update_edges(node, x, y) {
 
     e.lg.children[1].setAttribute("x", m.x);
     e.lg.children[1].setAttribute("y", m.y);
+  }
+}
+
+function greyout(el, undo = false) {
+  if (undo) {
+    el.classList.remove("greyed");
+  } else {
+    // TODO: infill color needs to be greyed out too and then restored
+    // maybe we can define css classes for everything and not bother with all that
+    el.classList.add("greyed");
   }
 }
 
@@ -242,15 +396,6 @@ function main() {
     for (n of graph_data.nodes) {
       let x = n.x;
       let y = n.y;
-
-      // consider node's transform
-      const match = n.g.children[0].style.transform.match(
-        /translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
-      );
-      if (match) {
-        x += Number(match[1]);
-        y += Number(match[3]);
-      }
 
       // consider node's size + some margin
       let bb = n.g.getBBox();
@@ -368,64 +513,82 @@ function main() {
     // hide all nodes
     for (n of graph_data.nodes) {
       for (child of n.g.children) {
-        child.classList.add("greyed");
+        greyout(child);
       }
     }
     // hide all edges
     for (edge of graph_data.edges) {
       for (child of edge.g.children) {
-        child.classList.add("greyed");
+        greyout(child);
+      }
+    }
+
+    // hide all edge labels
+    for (edge of graph_data.edges) {
+      for (child of edge.lg.children) {
+        greyout(child);
       }
     }
 
     // reenable selected node
     for (child of target.children) {
-      child.classList.remove("greyed");
+      greyout(child, true);
     }
 
     selectedElement = target.children[0];
     selectedElement.classList.add("selected");
 
-    // reenable connected edges and nodes
+    // reenable connected nodes, edges, edge labels
     for (edge of selectedElement.parentElement.n.out_edges) {
       for (child of edge.g.children) {
-        child.classList.remove("greyed");
+        greyout(child, true);
+      }
+      for (child of edge.lg.children) {
+        greyout(child, true);
       }
       for (child of edge.target_node.g.children) {
-        child.classList.remove("greyed");
+        greyout(child, true);
       }
     }
     for (edge of selectedElement.parentElement.n.in_edges) {
       for (child of edge.g.children) {
-        child.classList.remove("greyed");
+        greyout(child, true);
+      }
+      for (child of edge.lg.children) {
+        greyout(child, true);
       }
       for (child of edge.src_node.g.children) {
-        child.classList.remove("greyed");
+        greyout(child, true);
       }
     }
 
     // get mousedown info
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const match = selectedElement.style.transform.match(
-      /translate\((-?\d+(\.\d+)?)px,\s*(-?\d+(\.\d+)?)px\)/,
-    );
+    var mouse = {
+      x: e.clientX,
+      y: e.clientY,
+    };
 
     // move affected node
     let mousemoveHandler = (e) => {
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+      const dx = e.clientX - mouse.x;
+      const dy = e.clientY - mouse.y;
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+
       let x = dx / currentScale.value;
       let y = dy / currentScale.value;
-      if (match) {
-        x += Number(match[1]);
-        y += Number(match[3]);
-      }
+
+      // update node's position in graph_data
+      selectedElement.parentElement.n.x =
+        parseFloat(child.getAttribute("x")) + x;
+      selectedElement.parentElement.n.y =
+        parseFloat(child.getAttribute("y")) + y;
+
       for (child of selectedElement.parentElement.children) {
-        child.style.transform = `translate(${x}px, ${y}px)`;
+        child.setAttribute("x", parseFloat(child.getAttribute("x")) + x);
+        child.setAttribute("y", parseFloat(child.getAttribute("y")) + y);
       }
 
-      // console.log("Upd edges: ", selectedElement, x, y);
       update_edges(selectedElement, x, y);
 
       updateOccupiedArea();
@@ -439,16 +602,22 @@ function main() {
       // hide all nodes
       for (n of graph_data.nodes) {
         for (child of n.g.children) {
-          child.classList.remove("greyed");
+          greyout(child, true);
         }
       }
       // unhide all edges
       for (edge of graph_data.edges) {
         for (child of edge.g.children) {
-          child.classList.remove("greyed");
+          greyout(child, true);
         }
       }
 
+      // unhide all edge labels
+      for (edge of graph_data.edges) {
+        for (child of edge.lg.children) {
+          greyout(child, true);
+        }
+      }
       document.removeEventListener("mousemove", mousemoveHandler);
       document.removeEventListener("mouseup", mouseupHandler);
 
@@ -486,13 +655,11 @@ function main() {
   };
 
   let searchTerm = (term) => {
-    // console.log(graph_data.nodes);
     for (n of graph_data.nodes) {
       n.g.remove();
     }
     graph_data.nodes = [];
 
-    // console.log(graph_data.edges);
     for (e of graph_data.edges) {
       e.g.remove();
       e.lg.remove();

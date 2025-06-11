@@ -1,12 +1,10 @@
 # Graph visualization tool
 - rendering to svg
-- graph definition via json editing in `graph_data.js`
-- panning, zoom moving graph nodes around
+- panning, zoom moving nodes around
 - searching/filtering by node name and edge type
 
-## Graph description
-- can be saved to `graph_data.js` - then imported in index.html
-- see `position_nodes.py` for example of how it's done for `Project Gutenberg` example graph
+## Define Your Graph
+- mock graph data in `index.html`
 ```js
 var sourceData = {
     nodes: [
@@ -37,8 +35,27 @@ var sourceData = {
             tgt: "four",
             type: "relation 2-4",
         },
+        {
+            src: "three",
+            tgt: "two",
+            type: "relation 3-2",
+        }
     ],
 };
 ```
+- you can also look at another example - `graph_data.js` - build on Project Gutenberg text
+```html
+remove <!-- and --> around
+<!-- <script src="graph_data.js"></script> -->
+
+and delete mock data
+<!-- Mock data -->
+<script>...</script>
+
+be careful not to delete
+<!-- Visualization logic -->
+<script src="graph_viz.js"></script>
+```
 
 # To see graph visualization - open `index.html` in your browser
+![Screenshot.png](https://github.com/StcInc/svg_graph_viz_tool/raw/master/Screenshot.png "Screenshot.png")
