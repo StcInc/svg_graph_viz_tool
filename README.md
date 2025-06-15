@@ -1,7 +1,11 @@
 # Graph visualization tool
 - rendering to svg
-- panning, zoom moving nodes around
+- panning, zoom, dragging nodes around with mouse
 - searching/filtering by node name and edge type
+- animate node positioning
+
+# See online demo
+https://stcinc.github.io/svg_graph_viz_tool/
 
 ## Define Your Graph
 - mock graph data in `index.html`
