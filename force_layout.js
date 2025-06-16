@@ -41,6 +41,30 @@ var settings = {
   randomize_move: false,
 };
 
+var state = {
+  svg: null,
+
+  nodes: {}, // n.id: Node(n.id, x:, y:, g: )
+  edges: [],
+  node_edges: {}, // n.id: []
+  animate: false,
+
+  searching: false,
+
+  scale: 1.0,
+  viewPoint: {
+    x: 0,
+    y: 0,
+  },
+
+  mouse: {
+    x: 0,
+    y: 0,
+    active: false,
+    selectedNode: null,
+  },
+};
+
 function getArrowPoints(x1, y1, x2, y2) {
   // rotate x1 around x2 by +-angle radians
 
@@ -501,10 +525,6 @@ function computeForces(state) {
           ),
         );
 
-        if (magnitude > 1e20) {
-          console.log("HEEEEEEERE!");
-        }
-
         let fx =
           (magnitude *
             (settings.attraction_force * (e.tgt_node.x - e.src_node.x))) /
@@ -643,29 +663,9 @@ function updateForces(state) {
 }
 
 function main() {
-  var state = {
-    svg: document.getElementById("my-svg"),
-
-    nodes: {}, // n.id: Node(n.id, x:, y:, g: )
-    edges: [],
-    node_edges: {}, // n.id: []
-    animate: false,
-
-    searching: false,
-
-    scale: 1.0,
-    viewPoint: {
-      x: 0,
-      y: 0,
-    },
-
-    mouse: {
-      x: 0,
-      y: 0,
-      active: false,
-      selectedNode: null,
-    },
-  };
+  state.svg = document.getElementById("my-svg");
+  state.totalEdgeLenDisplay = document.getElementById("totalEdgeLen");
+  state.avgEdgeLenDisplay = document.getElementById("avgEdgeLen");
 
   x_max = 1000;
   y_max = 800;
@@ -674,8 +674,10 @@ function main() {
   for (n of sourceData.nodes) {
     state.nodes[n.id] = new Node(
       n.id,
-      -x_max / 2 + Math.random() * x_max,
-      -y_max / 2 + Math.random() * y_max,
+      n.x,
+      n.y,
+      // -x_max / 2 + Math.random() * x_max,
+      // -y_max / 2 + Math.random() * y_max,
       state.svg,
     );
   }
@@ -753,6 +755,18 @@ function main() {
   // }
 
   updateForces(state);
+  computeMetrics(state);
+
+  function computeMetrics(state) {
+    var cumSum = 0;
+    for (e of state.edges) {
+      let d = dist(e.src_node, e.tgt_node);
+      cumSum += d;
+    }
+    let avg = cumSum / state.edges.length;
+    state.totalEdgeLenDisplay.innerText = cumSum.toFixed(3);
+    state.avgEdgeLenDisplay.innerText = avg.toFixed(3);
+  }
 
   function updateStep(state) {
     state.forces = computeForces(state);
@@ -764,6 +778,8 @@ function main() {
     }
     panToCenter(state);
     updateForces(state);
+
+    computeMetrics(state);
   }
 
   // animate node positioning
