@@ -401,6 +401,28 @@ function Node(id, x, y, svg) {
       this.g.setAttribute("visibility", "visible");
     }
   };
+
+  this.getWidth = function () {
+    return this.rect.getBBox().width;
+  };
+  this.getHeight = function () {
+    return this.rect.getBBox().height;
+  };
+  this.copmuteOverlapArea = function (another) {
+    let bb = this.rect.getBBox();
+    let abb = another.rect.getBBox();
+
+    let x =
+      Math.min(bb.x + bb.width, abb.x + abb.width) - Math.max(bb.x, abb.x);
+    let y =
+      Math.min(bb.y + bb.height, abb.y + abb.height) - Math.max(bb.y, abb.y);
+
+    if (x <= 0 || y <= 0) {
+      return 0;
+    }
+
+    return x * y;
+  };
   this.updateForceVector = function (v) {
     if (!this.visible) {
       return;
@@ -662,10 +684,24 @@ function updateForces(state) {
   }
 }
 
+function exportPositions(state) {
+  return JSON.stringify(
+    Object.values(state.nodes).map((n) => ({
+      id: n.id,
+      x: n.x,
+      y: n.y,
+      w: n.getWidth(),
+      h: n.getHeight(),
+    })),
+  );
+}
+
 function main() {
   state.svg = document.getElementById("my-svg");
   state.totalEdgeLenDisplay = document.getElementById("totalEdgeLen");
   state.avgEdgeLenDisplay = document.getElementById("avgEdgeLen");
+  state.totalOverlapAreaDisplay = document.getElementById("totalOverlapArea");
+  state.maxEdgeLenDisplay = document.getElementById("maxEdgeLen");
 
   x_max = 1000;
   y_max = 800;
@@ -759,13 +795,32 @@ function main() {
 
   function computeMetrics(state) {
     var cumSum = 0;
+    var max = 0;
     for (e of state.edges) {
       let d = dist(e.src_node, e.tgt_node);
+      if (d > max) {
+        max = d;
+      }
       cumSum += d;
     }
     let avg = cumSum / state.edges.length;
     state.totalEdgeLenDisplay.innerText = cumSum.toFixed(3);
     state.avgEdgeLenDisplay.innerText = avg.toFixed(3);
+    state.maxEdgeLenDisplay.innerText = max.toFixed(3);
+
+    var overlap = 0;
+    let nids = Object.keys(state.nodes);
+    for (var i = 0; i < nids.length; ++i) {
+      let n1 = state.nodes[nids[i]];
+
+      // TODO: optimize this with introduction of spatial indexing
+      for (var j = i + 1; j < nids.length; ++j) {
+        let n2 = state.nodes[nids[j]];
+        overlap += n1.copmuteOverlapArea(n2);
+      }
+    }
+
+    state.totalOverlapAreaDisplay.innerText = overlap.toFixed(3);
   }
 
   function updateStep(state) {
