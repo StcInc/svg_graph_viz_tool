@@ -5,7 +5,8 @@
 - animate node positioning
 
 # See online demo
-https://stcinc.github.io/svg_graph_viz_tool/
+- https://stcinc.github.io/svg_graph_viz_tool/
+- or open `index.html` locally in your browser
 
 ## Define Your Graph
 - mock graph data in `index.html`
@@ -62,4 +63,3 @@ be careful not to delete
 ```
 
 # To see graph visualization - open `index.html` in your browser
-![Screenshot.png](https://github.com/StcInc/svg_graph_viz_tool/raw/master/Screenshot.png "Screenshot.png")

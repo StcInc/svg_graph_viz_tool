@@ -30,7 +30,7 @@ var settings = {
   // TODO: populate settings from ui
   // TODO: add all settings to ui
 
-  showResultingForceVectors: false,
+  showResultingForceVectors: true,
 
   radius: 200,
   speed: 1,
@@ -321,6 +321,25 @@ function Node(id, x, y, svg) {
     this.arrow.setAttribute("stroke", "red");
     this.arrow.setAttribute("stroke-width", settings.arrowOutlineWidth);
     this.forceVector.appendChild(this.arrow);
+
+    this.forceBackRect = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect",
+    );
+    this.forceBackRect.setAttribute("fill", "white");
+    this.forceBackRect.setAttribute("stroke", "white");
+    this.forceVector.appendChild(this.forceBackRect);
+
+    this.forceValueText = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "text",
+    );
+    // this.forceValueText.setAttribute("dominant-baseline", "middle");
+    // this.forceValueText.setAttribute("text-anchor", "middle");
+    this.forceValueText.setAttribute("fill", "red");
+    this.forceValueText.setAttribute("font-family", settings.fontFamily);
+    this.forceValueText.setAttribute("font-size", settings.fontSize);
+    this.forceVector.appendChild(this.forceValueText);
   };
 
   this.createSVG(svg);
@@ -365,17 +384,38 @@ function Node(id, x, y, svg) {
     if (settings.showResultingForceVectors) {
       this.forceVector.setAttribute("visibility", "visible");
 
+      let len = Math.sqrt(Math.pow(v.x, 2) + Math.pow(v.y, 2)) + 1e-4;
+
+      let targetLen = Math.max(len, 50);
+
+      let t = {
+        x: this.x + (targetLen * v.x + 1e-4) / len,
+        y: this.y + (targetLen * v.y + 1e-4) / len,
+      };
+
       // update arrow
       this.arrow.setAttribute(
         "points",
-        getArrowPoints(this.x, this.y, this.x + v.x, this.y + v.y),
+        getArrowPoints(this.x, this.y, t.x, t.y),
       );
 
       // update line
       this.line.setAttribute("x1", this.x);
       this.line.setAttribute("y1", this.y);
-      this.line.setAttribute("x2", this.x + v.x);
-      this.line.setAttribute("y2", this.y + v.y);
+      this.line.setAttribute("x2", t.x);
+      this.line.setAttribute("y2", t.y);
+
+      this.forceValueText.textContent = len.toFixed(2);
+
+      this.forceValueText.setAttribute("x", t.x + (20 * v.x) / len);
+      this.forceValueText.setAttribute("y", t.y + (20 * v.y) / len);
+
+      let bb = this.forceValueText.getBBox();
+      this.forceBackRect.setAttribute("x", bb.x);
+      this.forceBackRect.setAttribute("y", bb.y);
+
+      this.forceBackRect.setAttribute("width", bb.width);
+      this.forceBackRect.setAttribute("height", bb.height);
     } else {
       this.forceVector.setAttribute("visibility", "hidden");
     }
@@ -406,20 +446,28 @@ function computeForces(state) {
 
         if (2 * settings.radius - d > 1) {
           // move overlaping nodes apart
-          forces[n1.id].x +=
-            (settings.repulsion_force * (n1.x - n2.x) * settings.radius) /
-            Math.pow(Math.max(d, 1e-4), 2);
-          forces[n1.id].y +=
-            (settings.repulsion_force * (n1.y - n2.y) * settings.radius) /
-            Math.pow(Math.max(d, 1e-4), 2);
+          let fx =
+            ((settings.radius / Math.max(d, 1e-4)) *
+              (settings.repulsion_force * (n1.x - n2.x))) /
+            Math.max(d, 1e-4);
+          let fy =
+            ((settings.radius / Math.max(d, 1e-4)) *
+              (settings.repulsion_force * (n1.y - n2.y))) /
+            Math.max(d, 1e-4);
+
+          // console.log(
+          //   "repuls",
+          //   nids[i],
+          //   nids[j],
+          //   (settings.radius / Math.max(d, 1e-4)).toFixed(2),
+          // );
+
+          forces[n1.id].x += fx;
+          forces[n1.id].y += fy;
           forces[n1.id].c += 1;
 
-          forces[n2.id].x +=
-            (settings.repulsion_force * (n2.x - n1.x) * settings.radius) /
-            Math.pow(Math.max(d, 1e-4), 2);
-          forces[n2.id].y +=
-            (settings.repulsion_force * (n2.y - n1.y) * settings.radius) /
-            Math.pow(Math.max(d, 1e-4), 2);
+          forces[n2.id].x += -fx;
+          forces[n2.id].y += -fy;
           forces[n2.id].c += 1;
         }
       }
@@ -433,33 +481,52 @@ function computeForces(state) {
     }
   }
 
+  // TODO: with bigger update steps numerical stability blows up
+
   // moves connected nodes closer
   if (settings.attraction_force) {
     for (e of state.edges) {
       let d = dist(e.src_node, e.tgt_node);
       if (d - 2 * settings.radius > 1) {
-        forces[e.src_node.id].x +=
-          (settings.attraction_force *
-            (e.tgt_node.x - e.src_node.x) *
-            Math.max(d, 1e-4)) /
-          (Math.max(d, 1e-4) * settings.radius);
-        forces[e.src_node.id].y +=
-          (settings.attraction_force *
-            (e.tgt_node.y - e.src_node.y) *
-            Math.max(d, 1e-4)) /
-          (Math.max(d, 1e-4) * settings.radius);
+        // let magnitude = Math.min(
+        //   Math.exp(Math.max(d, 1e-4) / settings.radius),
+        //   d - settings.radius,
+        // );
+
+        // limit magnitude to be <= (d - radius) /speed
+        let magnitude = Math.exp(
+          Math.min(
+            Math.max(d, 1e-4) / settings.radius,
+            Math.log(d - settings.radius) / settings.speed,
+          ),
+        );
+
+        if (magnitude > 1e20) {
+          console.log("HEEEEEEERE!");
+        }
+
+        let fx =
+          (magnitude *
+            (settings.attraction_force * (e.tgt_node.x - e.src_node.x))) /
+          Math.max(d, 1e-4);
+        let fy =
+          (magnitude *
+            (settings.attraction_force * (e.tgt_node.y - e.src_node.y))) /
+          Math.max(d, 1e-4);
+
+        // console.log(
+        //   "attr",
+        //   e.src_node.id,
+        //   e.tgt_node.id,
+        //   (Math.max(d, 1e-4) / settings.radius).toFixed(2),
+        // );
+
+        forces[e.src_node.id].x += fx;
+        forces[e.src_node.id].y += fy;
         forces[e.src_node.id].c += 1;
 
-        forces[e.tgt_node.id].x +=
-          (settings.attraction_force *
-            (e.src_node.x - e.tgt_node.x) *
-            Math.max(d, 1e-4)) /
-          (Math.max(d, 1e-4) * settings.radius);
-        forces[e.tgt_node.id].y +=
-          (settings.attraction_force *
-            (e.src_node.y - e.tgt_node.y) *
-            Math.max(d, 1e-4)) /
-          (Math.max(d, 1e-4) * settings.radius);
+        forces[e.tgt_node.id].x += -fx;
+        forces[e.tgt_node.id].y += -fy;
         forces[e.tgt_node.id].c += 1;
       }
     }
@@ -567,8 +634,10 @@ function updateForces(state) {
   for (nid in state.nodes) {
     let n = state.nodes[nid];
     n.updateForceVector({
-      x: (50 * (settings.speed * state.forces[n.id].x)) / state.forces[n.id].c,
-      y: (50 * (settings.speed * state.forces[n.id].y)) / state.forces[n.id].c,
+      x:
+        (settings.speed * state.forces[n.id].x) / (state.forces[n.id].c + 1e-4),
+      y:
+        (settings.speed * state.forces[n.id].y) / (state.forces[n.id].c + 1e-4),
     });
   }
 }
@@ -795,6 +864,7 @@ function main() {
       // TODO: works slower and worse than wheel for some reason
       // pan(state, x, y);
     }
+    updateForces(state);
   });
 
   document.addEventListener("mouseup", function (event) {
