@@ -30,9 +30,9 @@ var settings = {
   // TODO: populate settings from ui
   // TODO: add all settings to ui
 
-  showResultingForceVectors: true,
+  showResultingForceVectors: false,
 
-  radius: 200,
+  radius: 500,
   speed: 1,
 
   repulsion_force: 1.0,
@@ -47,7 +47,10 @@ var state = {
   nodes: {}, // n.id: Node(n.id, x:, y:, g: )
   edges: [],
   node_edges: {}, // n.id: []
+  spatialIndex: null,
+
   animate: false,
+  updateInterval: null,
 
   searching: false,
 
@@ -468,6 +471,51 @@ function Node(id, x, y, svg) {
   };
 }
 
+function SpatialIndex() {
+  this.idx = {}; // (x, y) -> node
+
+  // this.min_x = 0;
+  // this.min_y = 0;
+  // this.max_x = 0;
+  // this.max_y = 0;
+
+  this.isOccupied = function (point) {
+    return point in this.idx;
+  };
+
+  this.add = function (point, node) {
+    if (point in this.idx) {
+      return false;
+    }
+    this.idx[point] = node;
+
+    // if (point[0] > this.max_x) {
+    //   this.max_x = point[0];
+    // }
+    // if (point[0] < this.min_x) {
+    //   this.min_x = point[0];
+    // }
+    // if (point[1] > this.max_y) {
+    //   this.max_y = point[1];
+    // }
+    // if (point[1] < this.min_y) {
+    //   this.min_y = point[1];
+    // }
+    return true;
+  };
+
+  this.remove = function (point) {
+    if (!(point in this.idx)) {
+      return false;
+    }
+    delete this.idx[point];
+
+    // TODO: update min/max values ?
+
+    return true;
+  };
+}
+
 function dist(n1, n2) {
   return Math.sqrt(Math.pow(n1.x - n2.x, 2) + Math.pow(n1.y - n2.y, 2));
 }
@@ -479,73 +527,20 @@ function computeForces(state) {
     forces[nid] = { x: 0, y: 0, c: 0 };
   }
 
-  // move nodes apart
-  if (settings.repulsion_force) {
-    for (var i = 0; i < nids.length; ++i) {
-      let n1 = state.nodes[nids[i]];
-
-      // TODO: optimize this with introduction of spatial indexing
-      for (var j = i + 1; j < nids.length; ++j) {
-        let n2 = state.nodes[nids[j]];
-
-        let d = dist(n1, n2);
-
-        if (2 * settings.radius - d > 1) {
-          // move overlaping nodes apart
-          let fx =
-            ((settings.radius / Math.max(d, 1e-4)) *
-              (settings.repulsion_force * (n1.x - n2.x))) /
-            Math.max(d, 1e-4);
-          let fy =
-            ((settings.radius / Math.max(d, 1e-4)) *
-              (settings.repulsion_force * (n1.y - n2.y))) /
-            Math.max(d, 1e-4);
-
-          // console.log(
-          //   "repuls",
-          //   nids[i],
-          //   nids[j],
-          //   (settings.radius / Math.max(d, 1e-4)).toFixed(2),
-          // );
-
-          forces[n1.id].x += fx;
-          forces[n1.id].y += fy;
-          forces[n1.id].c += 1;
-
-          forces[n2.id].x += -fx;
-          forces[n2.id].y += -fy;
-          forces[n2.id].c += 1;
-        }
-      }
-
-      if (settings.randomize_move) {
-        // introduce random vector to get system unstuck
-        forces[n1.id].x += Math.random();
-        forces[n1.id].y += Math.random();
-        forces[n1.id].c += 1;
-      }
-    }
-  }
-
-  // TODO: with bigger update steps numerical stability blows up
-
   // moves connected nodes closer
   if (settings.attraction_force) {
     for (e of state.edges) {
       let d = dist(e.src_node, e.tgt_node);
       if (d - 2 * settings.radius > 1) {
-        // let magnitude = Math.min(
-        //   Math.exp(Math.max(d, 1e-4) / settings.radius),
-        //   d - settings.radius,
-        // );
-
         // limit magnitude to be <= (d - radius) /speed
-        let magnitude = Math.exp(
-          Math.min(
-            Math.max(d, 1e-4) / settings.radius,
-            Math.log(d - settings.radius) / settings.speed,
-          ),
-        );
+        // let magnitude = Math.exp(
+        //   Math.min(
+        //     Math.max(d, 1e-4) / settings.radius,
+        //     Math.log(d - settings.radius) / settings.speed,
+        //   ),
+        // );
+        //
+        let magnitude = 1.0;
 
         let fx =
           (magnitude *
@@ -555,13 +550,6 @@ function computeForces(state) {
           (magnitude *
             (settings.attraction_force * (e.tgt_node.y - e.src_node.y))) /
           Math.max(d, 1e-4);
-
-        // console.log(
-        //   "attr",
-        //   e.src_node.id,
-        //   e.tgt_node.id,
-        //   (Math.max(d, 1e-4) / settings.radius).toFixed(2),
-        // );
 
         forces[e.src_node.id].x += fx;
         forces[e.src_node.id].y += fy;
@@ -575,34 +563,96 @@ function computeForces(state) {
   }
 
   // TODO: prevent edges from intersecting other nodes
-  // TODO: try to exponentiate forces instead of linear increase
 
   if (settings.gravitational_force) {
     let center = { x: 0, y: 0 };
     for (nid in state.nodes) {
       let n = state.nodes[nid];
       let d = dist(n, center);
+      let magnitude = 1.0;
+      // let magnitude = * Math.max(d, 1e-4)) /  settings.radius;
+
       forces[nid].x +=
-        (settings.gravitational_force * -n.x * Math.max(d, 1e-4)) /
-        (Math.max(d, 1e-4) * settings.radius);
+        (magnitude * settings.gravitational_force * -n.x) / Math.max(d, 1e-4);
       forces[nid].y +=
-        (settings.gravitational_force * -n.y * Math.max(d, 1e-4)) /
-        (Math.max(d, 1e-4) * settings.radius);
+        (magnitude * settings.gravitational_force * -n.y) / Math.max(d, 1e-4);
       forces[nid].c += 1;
     }
   }
   return forces;
 }
 
+// // square spiral around (x,y) in whole numbers
+// function* spiral(x, y) {
+//   var r = 1;
+//   while (true) {
+//     _x, (_y = x + r), y + r;
+//     // go down
+//     while (_y > y - r) {
+//       yield [_x, _y];
+//       _y -= 1;
+//     }
+//     // go left
+//     while (_x > x - r) {
+//       yield [_x, _y];
+//       _x -= 1;
+//     }
+//     // go up
+//     while (_y < y + r) {
+//       yield [_x, _y];
+//       _y += 1;
+//     }
+//     // go right
+//     while (_x < x + r) {
+//       yield [_x, _y];
+//       _x += 1;
+//     }
+//     r += 1;
+//   }
+// }
+
 function applyForces(state, forces) {
   // apply forces
   for (nid in state.nodes) {
     if (forces[nid].c) {
       let n = state.nodes[nid];
-      n.move(
-        n.x + (settings.speed * forces[n.id].x) / forces[n.id].c,
-        n.y + (settings.speed * forces[n.id].y) / forces[n.id].c,
-      );
+
+      // current position
+      let x = Math.floor(n.x / settings.radius);
+      let y = Math.floor(n.y / settings.radius);
+
+      let dx = (settings.speed * forces[n.id].x) / forces[n.id].c;
+      let dy = (settings.speed * forces[n.id].y) / forces[n.id].c;
+      let dlen = Math.max(Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2)), 1e-4);
+      dx /= dlen;
+      dy /= dlen;
+
+      // new position
+      let nx = Math.round(x + dx);
+      let ny = Math.round(y + dy);
+
+      // console.log("trying", nx, ny, " for ", n.id, x, y, " dxdy: ", dx, dy);
+
+      // TODO: introduce node position swaps to continue reducing edge lenghts
+
+      if (nx == x && ny == y) {
+        continue;
+      }
+
+      var scale = 1.0;
+      const max_scale = 10.0;
+      // try nodes along (x, y) -> (nx, ny) vector
+      while (scale < max_scale && state.spatialIndex.isOccupied([nx, ny])) {
+        scale += 1.0;
+        nx = Math.round(x + dx * scale);
+        ny = Math.round(y + dy * scale);
+      }
+
+      if (!state.spatialIndex.isOccupied([nx, ny])) {
+        state.spatialIndex.remove([x, y]);
+        n.move(nx * settings.radius, ny * settings.radius);
+        state.spatialIndex.add([nx, ny], n);
+      }
     }
   }
 }
@@ -630,6 +680,7 @@ function pan(state, dx, dy) {
 
 function zoom(state, scale) {
   state.scale *= scale;
+  state.scaleDisplay.innerText = state.scale.toFixed(4);
   state.svg.style.transform = `scale(${state.scale}, ${state.scale}) translate(${state.viewPoint.x}px, ${state.viewPoint.y}px)`;
 }
 
@@ -685,15 +736,132 @@ function updateForces(state) {
 }
 
 function exportPositions(state) {
-  return JSON.stringify(
-    Object.values(state.nodes).map((n) => ({
+  data = JSON.stringify({
+    nodes: Object.values(state.nodes).map((n) => ({
       id: n.id,
       x: n.x,
       y: n.y,
       w: n.getWidth(),
       h: n.getHeight(),
     })),
-  );
+    edges: sourceData.edges,
+  });
+  return `var sourceData = ${data}`;
+}
+
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
+
+function panToCenter(state) {
+  if (settings.auto_pan_to_center) {
+    let center = computeGraphCenter(state);
+
+    // TODO: add to settings
+    // centerMarker.setAttribute("visibility", "visible");
+    // centerMarker.setAttribute("cx", center.x);
+    // centerMarker.setAttribute("cy", center.y);
+
+    state.viewPoint.x = 0;
+    state.viewPoint.y = 0;
+
+    // move center point to 0, 0
+    center.x = -center.x;
+    center.y = -center.y;
+
+    // add half the screen coords to center inside svg
+    center.x += state.svg.clientWidth / 2;
+    center.y += state.svg.clientHeight / 2;
+
+    pan(state, center.x, center.y);
+  }
+}
+
+function computeMetrics(state) {
+  var cumSum = 0;
+  var max = 0;
+  for (e of state.edges) {
+    let d = dist(e.src_node, e.tgt_node);
+    if (d > max) {
+      max = d;
+    }
+    cumSum += d;
+  }
+  let avg = cumSum / state.edges.length;
+  state.totalEdgeLenDisplay.innerText = cumSum.toFixed(3);
+  state.avgEdgeLenDisplay.innerText = avg.toFixed(3);
+  state.maxEdgeLenDisplay.innerText = max.toFixed(3);
+
+  var overlap = 0;
+  let nids = Object.keys(state.nodes);
+  for (var i = 0; i < nids.length; ++i) {
+    let n1 = state.nodes[nids[i]];
+
+    // TODO: optimize this with introduction of spatial indexing
+    for (var j = i + 1; j < nids.length; ++j) {
+      let n2 = state.nodes[nids[j]];
+      overlap += n1.copmuteOverlapArea(n2);
+    }
+  }
+
+  state.totalOverlapAreaDisplay.innerText = overlap.toFixed(3);
+}
+
+function updateStep(state) {
+  state.forces = computeForces(state);
+  applyForces(state, state.forces);
+
+  // update edges to match new node positions
+  for (e of state.edges) {
+    e.update();
+  }
+  panToCenter(state);
+  updateForces(state);
+
+  computeMetrics(state);
+}
+
+function initUI(state, settings) {
+  // initialize UI values to sync with what's in state/settings
+
+  document.getElementById("animate_on").checked = state.animate;
+  document.getElementById("animate_off").checked = !state.animate;
+
+  document.getElementById("attraction_force").value = settings.attraction_force;
+  document.getElementById("attraction-indicator").innerText =
+    `Attraction force: ${settings.attraction_force}`;
+
+  // document.getElementById("repulsion_force").value = settings.repulsion_force;
+  //   document.getElementById("repulsion-indicator").innerText =
+  //     `Repulsion force: ${settings.repulsion_force}`;
+
+  document.getElementById("gravitational_force").value =
+    settings.gravitational_force;
+  document.getElementById("gravity-indicator").innerText =
+    `Gravitational force: ${settings.gravitational_force}`;
+
+  // document.getElementById("randomize_on").checked =
+  //   settings.randomize_move;
+  // document.getElementById("randomize_off").checked =
+  //   !settings.randomize_move;
+
+  document.getElementById("radius").value = settings.radius;
+  document.getElementById("radius-indicator").innerText =
+    `Minimal distance between nodes(radius): ${settings.radius}`;
+
+  document.getElementById("update-speed").value = settings.speed;
+  document.getElementById("speed-indicator").innerText =
+    `Update step(speed): ${settings.speed}`;
+
+  document.getElementById("show_forces_on").checked =
+    settings.showResultingForceVectors;
+  document.getElementById("show_forces_off").checked =
+    !settings.showResultingForceVectors;
+
+  document.getElementById("center_on").checked = settings.auto_pan_to_center;
+  document.getElementById("center_off").checked = !settings.auto_pan_to_center;
+
+  // TODO: do for the rest of them
 }
 
 function main() {
@@ -702,21 +870,55 @@ function main() {
   state.avgEdgeLenDisplay = document.getElementById("avgEdgeLen");
   state.totalOverlapAreaDisplay = document.getElementById("totalOverlapArea");
   state.maxEdgeLenDisplay = document.getElementById("maxEdgeLen");
+  state.scaleDisplay = document.getElementById("scale");
+  state.scaleDisplay.innerText = state.scale.toFixed(4);
 
-  x_max = 1000;
-  y_max = 800;
+  state.spatialIndex = new SpatialIndex();
+  initUI(state, settings);
+
+  // x_max = 1000;
+  // y_max = 800;
 
   // create all nodes
   for (n of sourceData.nodes) {
+    // generate random pair of ints x,y on discrete grid
+    // var x = Math.floor(
+    //   getRandomInt(sourceData.nodes.length) - sourceData.nodes.length / 2,
+    // );
+
+    // var y = Math.floor(
+    //   getRandomInt(sourceData.nodes.length) - sourceData.nodes.length / 2,
+    // );
+
+    // multiply by settings.radius to get actual coords for nodes
     state.nodes[n.id] = new Node(
       n.id,
+      // x * settings.radius,
+      // y * settings.radius,
       n.x,
       n.y,
       // -x_max / 2 + Math.random() * x_max,
       // -y_max / 2 + Math.random() * y_max,
       state.svg,
     );
+
+    var x = Math.floor(n.x / settings.radius);
+    var y = Math.floor(n.y / settings.radius);
+
+    // add node to spatial index
+    while (!state.spatialIndex.add([x, y], state.nodes[n.id])) {
+      console.log("Collision");
+      x = Math.floor(
+        getRandomInt(sourceData.nodes.length) - sourceData.nodes.length / 2,
+      );
+
+      y = Math.floor(
+        getRandomInt(sourceData.nodes.length) - sourceData.nodes.length / 2,
+      );
+      state.nodes[n.id].move(x * settings.radius, y * settings.radius);
+    }
   }
+  console.log("Nodes inited");
 
   // create all edges
   for (e of sourceData.edges) {
@@ -754,95 +956,9 @@ function main() {
   // centerMarker.setAttribute("fill", "red");
   // centerMarker.setAttribute("visibility", "visible");
 
-  function panToCenter(state) {
-    if (settings.auto_pan_to_center) {
-      let center = computeGraphCenter(state);
-
-      // TODO: add to settings
-      // centerMarker.setAttribute("visibility", "visible");
-      // centerMarker.setAttribute("cx", center.x);
-      // centerMarker.setAttribute("cy", center.y);
-
-      state.viewPoint.x = 0;
-      state.viewPoint.y = 0;
-
-      // move center point to 0, 0
-      center.x = -center.x;
-      center.y = -center.y;
-
-      // add half the screen coords to center inside svg
-      center.x += state.svg.clientWidth / 2;
-      center.y += state.svg.clientHeight / 2;
-
-      pan(state, center.x, center.y);
-    }
-  }
-
   panToCenter(state);
-
-  // if (settings.showResultingForceVectors) {
-  //   for (nid in state.nodes) {
-  //     let n = state.nodes[nid];
-  //     n.updateForceVector({
-  //       x: Math.random() * 100,
-  //       y: Math.random() * 100,
-  //     });
-  //   }
-  // }
-
   updateForces(state);
   computeMetrics(state);
-
-  function computeMetrics(state) {
-    var cumSum = 0;
-    var max = 0;
-    for (e of state.edges) {
-      let d = dist(e.src_node, e.tgt_node);
-      if (d > max) {
-        max = d;
-      }
-      cumSum += d;
-    }
-    let avg = cumSum / state.edges.length;
-    state.totalEdgeLenDisplay.innerText = cumSum.toFixed(3);
-    state.avgEdgeLenDisplay.innerText = avg.toFixed(3);
-    state.maxEdgeLenDisplay.innerText = max.toFixed(3);
-
-    var overlap = 0;
-    let nids = Object.keys(state.nodes);
-    for (var i = 0; i < nids.length; ++i) {
-      let n1 = state.nodes[nids[i]];
-
-      // TODO: optimize this with introduction of spatial indexing
-      for (var j = i + 1; j < nids.length; ++j) {
-        let n2 = state.nodes[nids[j]];
-        overlap += n1.copmuteOverlapArea(n2);
-      }
-    }
-
-    state.totalOverlapAreaDisplay.innerText = overlap.toFixed(3);
-  }
-
-  function updateStep(state) {
-    state.forces = computeForces(state);
-    applyForces(state, state.forces);
-
-    // update edges to match new node positions
-    for (e of state.edges) {
-      e.update();
-    }
-    panToCenter(state);
-    updateForces(state);
-
-    computeMetrics(state);
-  }
-
-  // animate node positioning
-  setInterval(function () {
-    if (state.animate) {
-      updateStep(state);
-    }
-  }, 10);
 
   // event handlers --------------------------------------------
 
@@ -964,23 +1080,23 @@ function main() {
         return;
       }
       event.preventDefault();
-      if (event.key == " ") {
-        state.animate = !state.animate;
-        console.log("state.animate:", state.animate);
-        return;
-      } else if (event.key == "s") {
-        settings.repulsion_force = Math.abs(1.0 - settings.repulsion_force);
-        console.log("Repulsion", settings.repulsion_force);
-        return;
-      } else if (event.key == "a") {
-        settings.attraction_force = Math.abs(1.0 - settings.attraction_force);
-        console.log("Attraction:", settings.attraction_force);
-        return;
-      } else if (event.key == "r") {
-        settings.randomize_move = !settings.randomize_move;
-        console.log("Random moves:", settings.randomize_move);
-        return;
-      }
+      // if (event.key == " ") {
+      //   state.animate = !state.animate;
+      //   console.log("state.animate:", state.animate);
+      //   return;
+      // } else if (event.key == "s") {
+      //   settings.repulsion_force = Math.abs(1.0 - settings.repulsion_force);
+      //   console.log("Repulsion", settings.repulsion_force);
+      //   return;
+      // } else if (event.key == "a") {
+      //   settings.attraction_force = Math.abs(1.0 - settings.attraction_force);
+      //   console.log("Attraction:", settings.attraction_force);
+      //   return;
+      // } else if (event.key == "r") {
+      //   settings.randomize_move = !settings.randomize_move;
+      //   // console.log("Random moves:", settings.randomize_move);
+      //   return;
+      // }
       // TODO: handle multiple arrow keys pressed at once
       if (event.key == "ArrowLeft") {
         pan(state, 10 / state.scale, 0);
@@ -998,16 +1114,28 @@ function main() {
     { passive: false },
   );
 
+  document.getElementById("download-graph").onclick = function () {
+    navigator.clipboard.writeText(exportPositions(state));
+  };
+
   document
     .getElementById("animate_off")
     .addEventListener("change", function () {
       state.animate = false;
       console.log("state.animate:", state.animate);
+      if (state.updateInterval) {
+        clearInterval(state.updateInterval);
+        state.updateInterval = null;
+      }
     });
 
   document.getElementById("animate_on").addEventListener("change", function () {
     state.animate = true;
     console.log("state.animate:", state.animate);
+    // animate node positioning
+    state.updateInterval = setInterval(function () {
+      updateStep(state);
+    }, 10);
   });
 
   document.getElementById("update-step").onclick = function () {
@@ -1022,14 +1150,14 @@ function main() {
       `Attraction force: ${settings.attraction_force}`;
     updateForces(state);
   };
-  document.getElementById("repulsion_force").oninput = function () {
-    settings.repulsion_force = this.value;
-    console.log("repulsion_force", settings.repulsion_force);
+  // document.getElementById("repulsion_force").oninput = function () {
+  //   settings.repulsion_force = this.value;
+  //   console.log("repulsion_force", settings.repulsion_force);
 
-    document.getElementById("repulsion-indicator").innerText =
-      `Repulsion force: ${settings.repulsion_force}`;
-    updateForces(state);
-  };
+  //   document.getElementById("repulsion-indicator").innerText =
+  //     `Repulsion force: ${settings.repulsion_force}`;
+  //   updateForces(state);
+  // };
   document.getElementById("gravitational_force").oninput = function () {
     settings.gravitational_force = this.value;
     console.log("gravitational_force", settings.gravitational_force);
@@ -1039,24 +1167,37 @@ function main() {
     updateForces(state);
   };
 
-  document
-    .getElementById("randomize_off")
-    .addEventListener("change", function () {
-      settings.randomize_move = false;
-      console.log("settings.randomize_move:", settings.randomize_move);
-      updateForces(state);
-    });
+  // document
+  //   .getElementById("randomize_off")
+  //   .addEventListener("change", function () {
+  //     settings.randomize_move = false;
+  //     console.log("settings.randomize_move:", settings.randomize_move);
+  //     updateForces(state);
+  //   });
 
-  document
-    .getElementById("randomize_on")
-    .addEventListener("change", function () {
-      settings.randomize_move = true;
-      console.log("settings.randomize_move:", settings.randomize_move);
-      updateForces(state);
-    });
+  // document
+  //   .getElementById("randomize_on")
+  //   .addEventListener("change", function () {
+  //     settings.randomize_move = true;
+  //     console.log("settings.randomize_move:", settings.randomize_move);
+  //     updateForces(state);
+  //   });
 
   document.getElementById("radius").oninput = function () {
+    for (nid in state.nodes) {
+      state.nodes[nid].x = Math.floor(state.nodes[nid].x / settings.radius);
+      state.nodes[nid].y = Math.floor(state.nodes[nid].y / settings.radius);
+    }
+
     settings.radius = this.value;
+
+    for (nid in state.nodes) {
+      state.nodes[nid].move(
+        state.nodes[nid].x * settings.radius,
+        state.nodes[nid].y * settings.radius,
+      );
+    }
+
     console.log("settings.radius", settings.radius);
     document.getElementById("radius-indicator").innerText =
       `Minimal distance between nodes(radius): ${settings.radius}`;
@@ -1067,6 +1208,10 @@ function main() {
         let n = state.nodes[nid];
         n.orb.setAttribute("r", settings.radius);
       }
+    }
+
+    for (e of state.edges) {
+      e.update();
     }
     updateForces(state);
   };
