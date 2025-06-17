@@ -1,9 +1,3 @@
-test.html
+notebooks
 .ipynb_checkpoints/
-snippets.js
-export_graph_data*
-*backup*
-*.ipynb
-*log.txt
 .DS_Store
-*.dot
