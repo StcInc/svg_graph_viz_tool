@@ -94,7 +94,9 @@
                 Max edge len:
                 <b id="maxEdgeLen"></b> -> 0 <br />
                 Total overlap area:
-                <b id="totalOverlapArea"></b> -> 0 <br />
+                <b id="totalOverlapArea"></b> -> 0 <br /><br /><br />
+                Current scale:
+                <b id="scale"></b> <br />
             </div>
 
             <div>
@@ -111,121 +113,25 @@
                 <label for="animate_off">OFF</label><br /><br />
             </div>
 
-            <input type="button" id="update-step" value="Update step" />
-
-            <div class="slidecontainer">
-                <input
-                    type="range"
-                    min="0.0"
-                    max="1.0"
-                    value="1.0"
-                    step="0.01"
-                    class="slider"
-                    id="attraction_force"
-                />
-            </div>
-            <label id="attraction-indicator" for="attraction_force"
-                >Attraction force: 1</label
-            ><br /><br />
-
-            <div class="slidecontainer">
-                <input
-                    type="range"
-                    min="0.0"
-                    max="1.0"
-                    value="1.0"
-                    step="0.01"
-                    class="slider"
-                    id="repulsion_force"
-                />
-            </div>
-            <label id="repulsion-indicator" for="repulsion_force"
-                >Repulsion force: 1</label
-            ><br /><br />
-
-            <div class="slidecontainer">
-                <input
-                    type="range"
-                    min="0.0"
-                    max="1.0"
-                    value="1.0"
-                    step="0.01"
-                    class="slider"
-                    id="gravitational_force"
-                />
-            </div>
-            <label id="gravity-indicator" for="gravitational_force"
-                >Gravitational force: 1</label
-            ><br /><br />
-            <div>
-                <h3>Randomize movement:</h3>
-                <input
-                    type="radio"
-                    id="randomize_on"
-                    name="randomize"
-                    value="ON"
-                />
-                <label for="randomize_on">ON</label><br />
-                <input
-                    type="radio"
-                    id="randomize_off"
-                    name="randomize"
-                    value="OFF"
-                    checked
-                />
-                <label for="randomize_off">OFF</label><br /><br />
-            </div>
-
-            <div class="slidecontainer">
-                <input
-                    type="range"
-                    min="1"
-                    max="1000"
-                    value="200"
-                    step="10"
-                    class="slider"
-                    id="radius"
-                />
-            </div>
+            <input type="button" id="update-step" value="Update step" /> <br />
             <br />
-            <label id="radius-indicator" for="radius"
-                >Minimal distance between nodes(radius): 200</label
-            ><br /><br />
 
             <div class="slidecontainer">
                 <input
                     type="range"
-                    min="1"
-                    max="100"
-                    value="1"
+                    min="0"
+                    max="0"
+                    value="0"
                     step="1"
                     class="slider"
-                    id="update-speed"
+                    id="cur-step"
                 />
+                <br />
+                <label id="step-indicator" for="cur-step"
+                    >Current step: 0</label
+                >
             </div>
-            <br />
-            <label id="speed-indicator" for="update-speed"
-                >Update step(speed): 1</label
-            ><br /><br />
-
-            <div>
-                <h3>Show force vectors:</h3>
-                <input
-                    type="radio"
-                    id="show_forces_on"
-                    name="show_forces"
-                    value="ON"
-                    checked
-                />
-                <label for="show_forces_on">ON</label><br />
-                <input
-                    type="radio"
-                    id="show_forces_off"
-                    name="show_forces"
-                    value="OFF"
-                />
-                <label for="show_forces_off">OFF</label><br /><br />
-            </div>
+            <br /><br />
 
             <div>
                 <h3>Auto-pan to graph's center:</h3>
